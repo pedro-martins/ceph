@@ -1622,8 +1622,9 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
-  std::optional<map<string, RGWStorageStats>> sc_stats;
-  sc_stats.emplace();
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
 
   int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
                                 &bucket, y);
@@ -1645,7 +1646,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   std::string max_marker;
 
   if (has_index) {
-    ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, sc_stats, &max_marker);
     if (ret < 0) {
       cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
       return ret;
@@ -1656,14 +1657,6 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   if (!radosdriver) {
     cerr << "rados store only" << std::endl;
     return -ENOTSUP;
-  }
-
-  ret = radosdriver->getRados()->get_bucket_storage_classes_stats(dpp, y, bucket_info, RGW_NO_SHARD,
-                                                            &bucket_ver, &master_ver, sc_stats,
-                                                            &max_marker, index);
-  if (ret < 0) {
-    cerr << "error getting bucket storage class stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1783,7 +1776,10 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
+    std::map<std::string, RGWStorageStats>{}
+  };
+	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, sc_stats, nullptr);
 
 	if (ret < 0)
 	  continue;
